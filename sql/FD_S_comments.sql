@@ -1,288 +1,68 @@
-CREATE OR REPLACE FUNCTION FD_S_tw(x float, y float) RETURNS float AS $$
-	SELECT float8larger(0, $1 + $2 - 1);
-$$LANGUAGE sql IMMUTABLE;
+COMMENT ON FUNCTION FD_S_tw(float, float) IS
+'Calculate the Lukasiewicz t-norm.';
 
-CREATE OR REPLACE FUNCTION FD_S_iw(x float, y float) RETURNS float AS $$
-	SELECT float8smaller(1, 1 - $1 + $2);
-$$ LANGUAGE sql IMMUTABLE;
+COMMENT ON FUNCTION FD_S_iw(float, float) IS
+'Calculate the Lukasiewicz residual implicator';
 
-CREATE OR REPLACE FUNCTION FD_S_sw(x float, y float) RETURNS float AS $$
-	SELECT float8smaller(1, $1 + $2);
-$$ LANGUAGE sql IMMUTABLE;
+COMMENT ON FUNCTION FD_S_sw(float, float) IS
+'Calculate the conorm.';
 
+COMMENT ON FUNCTION FD_S_lb(float, float, float, float) IS
+'Calculate how much the first argument is long before the second argument. 
+The third and fourth parameters can be used to deteremine what long before is.';
 
-CREATE OR REPLACE FUNCTION FD_S_lb(a float, b float, alpha float, beta float) RETURNS float AS $$
-BEGIN
-	IF (b - a) > ( alpha + beta) THEN
-		RETURN 1;
-	ELSIF (b - a) <= alpha THEN
-		RETURN 0;
-	ELSE 
-		RETURN (b - a - alpha) / beta;
-	END IF;
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+COMMENT ON FUNCTION FD_S_beq(float, float, float, float) IS
+'Calculate how much the first argument is contemporary to the second argument.
+The third and fourth parameters can be used to deteremine what long before is.';
 
-CREATE OR REPLACE FUNCTION FD_S_beq(a float, b float, alpha float, beta float) RETURNS float AS $$
-BEGIN
-	RETURN 1 - FD_S_lb(b, a , alpha, beta);
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+------------------------
+-- Allen Relations S1 --
+------------------------
 
------------------------
--- Allen Relaties S1 --
------------------------
+COMMENT ON FUNCTION FD_S1_pointify(geometry) IS
+'Change the geometry into a set of points.';
 
-CREATE OR REPLACE FUNCTION FD_S1_pointify(g geometry) RETURNS SETOF geometry AS $$
-	SELECT ST_PointN($1,generate_series(1,ST_NPoints($1)))
-	UNION
-	SELECT ST_Line_Interpolate_Point(ST_MakeLine(sp,ep),0.01 * generate_series(1,100)) FROM (
-		SELECT 	ST_PointN($1, generate_series(1, ST_NPoints($1)-1)) AS sp,
-			ST_PointN($1, generate_series(2, ST_NPoints($1))) AS ep
-	) AS line_points
-	WHERE ST_Y(sp) <> ST_Y(ep);
-$$ LANGUAGE sql IMMUTABLE;
+------------------------
+-- Allen Relations S2 --
+------------------------
 
+COMMENT ON FUNCTION FD_S2_sl(geometry) IS
+'Calculate the fuzzy beginning of a FTI.';
 
-CREATE OR REPLACE FUNCTION FD_S1_allen_before(g1 geometry, g2 geometry, a float, b float) RETURNS float AS $$
-DECLARE
-	p geometry;
-	p2 geometry;
-	tmp float[];
-	tmpI float[];
-	inf float;
-	inf2 float;
-BEGIN
-	FOR p IN SELECT * FROM FD_S1_verpunt(g2) LOOP
-		tmpI := '{}'::float[];
-		FOR p2 IN SELECT * FROM FD_S1_verpunt(g1) LOOP
-			inf2 := FD_S_iw(ST_Y(p2),FD_S_lb(ST_X(p2),ST_X(p),a,b));
-			SELECT array_append(tmpI, inf2) INTO tmpI;
-		END LOOP;
-		SELECT INTO inf MIN(unnest) FROM UNNEST(tmpI);
-		SELECT array_append(tmp, FD_S_iw(ST_Y(p),inf)) INTO tmp;
-	END LOOP;
-	SELECT INTO inf MIN(unnest) FROM UNNEST(tmp);
-	RETURN inf;
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+COMMENT ON FUNCTION FD_S2_sr(geometry) IS
+'Calculate the fuzzy end of a FTI.';
 
-CREATE OR REPLACE FUNCTION FD_S1_allen_before(g1 geometry, g2 geometry) RETURNS float AS $$
-BEGIN
-	IF ST_XMax(g1) < ST_XMin(g2) THEN
-		RETURN 1;
-	END IF;
-	IF ST_XMin(g1) > ST_XMax(g2) THEN
-		RETURN 0;
-	END IF;
-	RETURN FD_S1_allen_before(g1,g2,0,0);
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+COMMENT ON FUNCTION FD_S2_before_bb(geometry, geometry, float, float) IS
+'Calculate how much the beginning of the first FTI is 
+before the beginning of the second FTI.';
 
------------------------
--- Allen Relaties S2 --
------------------------
+COMMENT ON FUNCTION FD_S2_equals_bb(geometry, geometry, float, float) IS
+'Calculate how much the beginning of the first FTI is contemporary to 
+the beginning of the second FTI.';
 
+COMMENT ON FUNCTION FD_S2_before_ee(geometry, geometry, float, float) IS
+'Calculate how much the end of the first FTI is 
+before the end of the second FTI.';
 
-CREATE OR REPLACE FUNCTION FD_S2_sl(g geometry) RETURNS float AS $$
-	SELECT ST_X(ST_PointN($1, 2)) - ST_X(ST_PointN($1,1));
-$$ LANGUAGE sql IMMUTABLE;
+COMMENT ON FUNCTION FD_S2_equals_ee(geometry, geometry, float, float) IS
+'Calculate how much the end of the first FTI is contemporary to 
+the end of the second FTI.';
 
-CREATE OR REPLACE FUNCTION FD_S2_sr(g geometry) RETURNS float AS $$
-	SELECT ST_X(ST_PointN($1, 4)) - ST_X(ST_PointN($1,3));
-$$ LANGUAGE sql IMMUTABLE;
+COMMENT ON FUNCTION FD_S2_before_eb(geometry, geometry, float, float) IS
+'Calculate how much the end of the first FTI is 
+before the beginning of the second FTI.';
 
+COMMENT ON FUNCTION FD_S2_equals_ee(geometry, geometry, float, float) IS
+'Calculate how much the end of the first FTI is contemporary to 
+the beginning of the second FTI.';
 
-CREATE OR REPLACE FUNCTION FD_S2_before_bb(g1 geometry, g2 geometry, alpha float, beta float) RETURNS float AS $$
-DECLARE
-	i float;
-	j float;
-	alpha1 float;
-BEGIN
-	i := FD_S_tw(ST_YMax(g1),1 - ST_YMax(g2));
-	alpha1 := 	alpha
-			+ ( float8smaller(0, FD_S2_sl(g2) - beta ) * ( 1 - ST_YMax(g2)) )
-			+ ( float8larger(beta,FD_S2_sl(g2)) * (1 - ST_YMax(g1) ) )
-			- (FD_S2_sl(g1))
-			+ ( ST_YMax(g1) * float8smaller(float8larger( beta, FD_S2_sl(g2)),FD_S2_sl(g1)));
-				
-	j := float8smaller(	ST_YMax(g1),
-						FD_S_lb(ST_X(ST_PointN(g1,2)),
-								ST_X(ST_PointN(g2,2)), 
-								alpha1, 
-								float8larger( beta, float8larger(FD_S2_sl(g1), FD_S2_sl(g2)))
-								)
-						);
-	RETURN float8larger(i,j);
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+COMMENT ON FUNCTION FD_S2_before_be(geometry, geometry, float, float) IS
+'Calculate how much the beginning of the first FTI is 
+before the end of the second FTI.';
 
-CREATE OR REPLACE FUNCTION FD_S2_equals_bb(g1 geometry, g2 geometry, alpha float, beta float) RETURNS float AS $$
-DECLARE
-	i float;
-	j float;
-	alpha2 float;
-BEGIN
-	i := FD_S_iw(ST_YMax(g2),ST_YMax(g1));
-	alpha2 := 	alpha
-			+ ( float8smaller(0, FD_S2_sl(g1) - beta ) * ( 1 - ST_YMax(g1)) )
-			+ ( float8larger(beta,FD_S2_sl(g1)) * (1 - ST_YMax(g2) ) )
-			- (FD_S2_sl(g2))
-			+ ( ST_YMax(g2) * float8smaller(float8larger( beta, FD_S2_sl(g1)),FD_S2_sl(g2)));
-				
-	j := float8larger(	1-ST_YMax(g2),
-						FD_S_beq(	ST_X(ST_PointN(g1,2)),
-									ST_X(ST_PointN(g2,2)), 
-									alpha2, 
-									float8larger( beta, float8larger(FD_S2_sl(g1), FD_S2_sl(g2)))
-									)
-						);
-	RETURN float8smaller(i,j);
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
-
-
-CREATE OR REPLACE FUNCTION FD_S2_before_ee(g1 geometry, g2 geometry, alpha float, beta float) RETURNS float AS $$
-DECLARE
-	i float;
-	j float;
-	alpha3 float;
-BEGIN
-	i := FD_S_tw(ST_YMax(g2),1 - ST_YMax(g1));
-	alpha3 := 	alpha
-			+ ( float8smaller(0, FD_S2_sr(g1) - beta ) * ( 1 - ST_YMax(g1)) )
-			+ ( float8larger(beta,FD_S2_sr(g1)) * (1 - ST_YMax(g2) ) )
-			- (FD_S2_sr(g2))
-			+ ( ST_YMax(g2) * float8smaller(float8larger( beta, FD_S2_sr(g1)),FD_S2_sr(g2) ) );
-				
-	j := float8smaller(	ST_YMax(g2),
-						FD_S_lb(	ST_X(ST_PointN(g1,3)),
-									ST_X(ST_PointN(g2,3)), 
-									alpha3, 
-									float8larger( beta, float8larger(FD_S2_sr(g1), FD_S2_sr(g2)))
-									)
-						);
-	RETURN float8larger(i,j);
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
-
-CREATE OR REPLACE FUNCTION FD_S2_equals_ee(g1 geometry, g2 geometry, alpha float, beta float) RETURNS float AS $$
-DECLARE
-	i float;
-	j float;
-	alpha4 float;
-BEGIN
-	i := FD_S_iw(ST_YMax(g1),ST_YMax(g2));
-	alpha4 := 	alpha
-			+ ( float8smaller(0, FD_S2_sr(g2) - beta ) * ( 1 - ST_YMax(g2)) )
-			+ ( float8larger(beta,FD_S2_sr(g2)) * (1 - ST_YMax(g1) ) )
-			- (FD_S2_sr(g1))
-			+ ( ST_YMax(g1) * float8smaller(float8larger( beta, FD_S2_sr(g2)),FD_S2_sr(g1) ) );
-				
-	j := float8larger(	1-ST_YMax(g1),
-						FD_S_beq(	ST_X(ST_PointN(g1,3)),
-									ST_X(ST_PointN(g2,3)), 
-									alpha4, 
-									float8larger( beta, float8larger(FD_S2_sr(g1), FD_S2_sr(g2)))
-									)
-						);
-	RETURN float8smaller(i,j);
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
-
-
-CREATE OR REPLACE FUNCTION FD_S2_before_eb(g1 geometry, g2 geometry, alpha float, beta float) RETURNS float AS $$
-DECLARE
-	i float;
-	j float;
-	alpha5 float;
-BEGIN
-	i := FD_S_sw(1 - ST_YMax(g1),1 - ST_YMax(g2));
-	alpha5 := 	alpha
-			+ ( float8smaller(0, FD_S2_sl(g2) - beta ) * ( 1 - ST_YMax(g2)) )
-			+ ( float8smaller( float8larger(beta,FD_S2_sl(g2)), FD_S2_sr(g1) ) )
-			- ( ST_YMax(g2) * float8larger( beta, FD_S2_sl(g2) ) )
-			- ( FD_S2_sr(g1) * ST_YMax(g1))
-			+ ( float8larger( beta, float8larger(FD_S2_sl(g2),FD_S2_sr(g1))) * FD_S_tw(ST_YMax(g1),ST_YMax(g2)));
-				
-	j := FD_S_lb(	ST_X(ST_PointN(g1,3)),
-					ST_X(ST_PointN(g2,2)), 
-					alpha5, 
-					float8larger( beta, float8larger(FD_S2_sr(g1), FD_S2_sl(g2)))
-					);
-	RETURN float8larger(i,j);
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
-
-CREATE OR REPLACE FUNCTION FD_S2_equals_eb(g1 geometry, g2 geometry, alpha float, beta float) RETURNS float AS $$
-DECLARE
-	i float;
-	j float;
-	alpha6 float;
-BEGIN
-	i := FD_S_sw(1 - ST_YMax(g1),1 - ST_YMax(g2));
-	alpha6 := 	alpha
-			+ ( float8smaller(beta - FD_S2_sl(g2),(beta-FD_S2_sl(g2)) * ( 1 - ST_YMax(g2) ) ) )
-			+ ( float8larger(beta,FD_S2_sl(g2)) * ST_YMax(g2) )
-			+ (FD_S2_sr(g1) * ST_YMax(g1))
-			- ( FD_S2_sr(g1) )
-			- ( float8larger( beta, float8larger(FD_S2_sr(g1),FD_S2_sl(g2))) * FD_S_tw(ST_YMax(g1),ST_YMax(g2)));
-				
-	j := FD_S_beq(	ST_X(ST_PointN(g1,3)),
-					ST_X(ST_PointN(g2,2)), 
-					alpha6, 
-					float8larger( beta, float8larger(FD_S2_sr(g1), FD_S2_sl(g2)))
-					);
-	RETURN float8larger(i,j);
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
-
-
-CREATE OR REPLACE FUNCTION FD_S2_before_be(g1 geometry, g2 geometry, alpha float, beta float) RETURNS float AS $$
-DECLARE
-	i float;
-	j float;
-	alpha7 float;
-BEGIN
-	i := FD_S_tw(ST_YMax(g1),ST_YMax(g2));
-	alpha7 := 	alpha
-			+ ( float8smaller(beta-FD_S2_sr(g2),(beta-FD_S2_sr(g2))*(1-ST_YMax(g2))))
-			+ ( FD_S2_sl(g1) * ST_YMax(g1))
-			+ ( float8larger(beta,FD_S2_sr(g2)) * ST_YMax(g2) )
-			- FD_S2_sl(g1)
-			- (float8larger(beta,float8larger(FD_S2_sl(g1),FD_S2_sr(g2))) * FD_S_tw(ST_YMax(g1),ST_YMax(g2)) );
-				
-	j := FD_S_lb(	ST_X(ST_PointN(g1,2)),
-					ST_X(ST_PointN(g2,3)), 
-					alpha7, 
-					float8larger( beta, float8larger(FD_S2_sl(g1), FD_S2_sr(g2)))
-					);
-	RETURN float8smaller(i,j);
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
-
-CREATE OR REPLACE FUNCTION FD_S2_equals_be(g1 geometry, g2 geometry, alpha float, beta float) RETURNS float AS $$
-DECLARE
-	i float;
-	j float;
-	alpha8 float;
-BEGIN
-	i := FD_S_tw(ST_YMax(g1),ST_YMax(g2));
-	alpha8 := 	alpha
-			+ (float8smaller(0,FD_S2_sr(g2)-beta) * (1 - ST_YMax(g2)))
-			+ (float8smaller(float8larger(beta,FD_S2_sr(g2)),FD_S2_sl(g1)))
-			- (ST_YMax(g1) * FD_S2_sl(g1))
-			- (ST_YMax(g2) * float8larger(beta,FD_S2_sr(g2)))
-			+ float8larger(beta,float8larger(FD_S2_sl(g1),FD_S2_sr(g2)) * FD_S_tw(ST_YMax(g1),ST_YMax(g2)));
-				
-	j := FD_S_beq(	ST_X(ST_PointN(g1,2)),
-					ST_X(ST_PointN(g2,3)), 
-					alpha8, 
-					float8larger( beta, float8larger(FD_S2_sl(g1), FD_S2_sr(g2)))
-					);
-	RETURN float8smaller(i,j);
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+COMMENT ON FUNCTION FD_S2_equals_ee(geometry, geometry, float, float) IS
+'Calculate how much the beginning of the first FTI is contemporary to 
+the end of the second FTI.';
 
 
 CREATE OR REPLACE FUNCTION FD_S2_allen_before(g1 geometry, g2 geometry, alpha float, beta float) RETURNS float AS $$
@@ -594,9 +374,9 @@ END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
 
--------------------------------
--- Samengestelde Relaties S2 --
--------------------------------
+----------------------------
+-- Composite Relations S2 --
+----------------------------
 
 
 CREATE OR REPLACE FUNCTION FD_S2_kvd_before(g1 geometry, g2 geometry, alpha float, beta float) RETURNS float AS $$

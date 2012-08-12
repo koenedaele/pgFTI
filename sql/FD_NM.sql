@@ -1,5 +1,5 @@
-CREATE OR REPLACE FUNCTION FD_NM_maakTijdsbalk() RETURNS box2d AS $$
-	SELECT ST_MakeBox2D(ST_MakePoint(FD_oudste(), 0), ST_MakePoint(FD_jongste(), 1));
+CREATE OR REPLACE FUNCTION FD_NM_makeTimeline() RETURNS box2d AS $$
+	SELECT ST_MakeBox2D(ST_MakePoint(FD_oldest(), 0), ST_MakePoint(FD_youngest(), 1));
 $$ LANGUAGE sql IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION FD_NM_YMin(g geometry) RETURNS float AS $$
@@ -24,26 +24,26 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 
 
 CREATE OR REPLACE FUNCTION FD_NM_extendNegative(g geometry) RETURNS geometry AS $$
-	SELECT ST_ConvexHull(ST_Collect(ST_MakeLine(ST_MakePoint(FD_oudste(),0),ST_MakePoint(FD_oudste(),1)),$1));
+	SELECT ST_ConvexHull(ST_Collect(ST_MakeLine(ST_MakePoint(FD_oldest(),0),ST_MakePoint(FD_oldest(),1)),$1));
 $$ LANGUAGE sql IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION FD_NM_extendPositive(g geometry) RETURNS geometry AS $$
-	SELECT ST_ConvexHull(ST_Collect(ST_MakeLine(ST_MakePoint(FD_jongste(),0),ST_MakePoint(FD_jongste(),1)),$1));
+	SELECT ST_ConvexHull(ST_Collect(ST_MakeLine(ST_MakePoint(FD_youngest(),0),ST_MakePoint(FD_youngest(),1)),$1));
 $$ LANGUAGE sql IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION FD_NM_complement(g geometry) RETURNS geometry AS $$
-SELECT ST_MakePolygon(ST_MakeLine(punt)) FROM (				
-	SELECT ST_Point(x,comp) AS punt FROM (
+SELECT ST_MakePolygon(ST_MakeLine(point)) FROM (				
+	SELECT ST_Point(x,comp) AS point FROM (
 		SELECT 	
 			ST_X(ST_PointN(column1,generate_series(1,ST_NPoints(column1)))) AS x,
 			1 - ST_Y(ST_PointN(column1,generate_series(1,ST_NPoints(column1)))) AS comp
-		FROM (VALUES(ST_Boundary(ST_Difference(FD_NM_maakTijdsbalk(),$1)))) AS split
-	) AS punten
-) AS lijn;
+		FROM (VALUES(ST_Boundary(ST_Difference(FD_NM_makeTimeline(),$1)))) AS split
+	) AS points
+) AS line;
 $$ LANGUAGE sql IMMUTABLE;
 
 --------------------
--- Allen Relaties --
+-- Allen Relations --
 --------------------
 
 
@@ -277,9 +277,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
-----------------------------
--- Samengestelde Relaties --
-----------------------------
+-------------------------
+-- Composite Relations --
+-------------------------
 
 CREATE OR REPLACE FUNCTION FD_NM_kvd_before(g1 geometry, g2 geometry) RETURNS float AS $$
 DECLARE
