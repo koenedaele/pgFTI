@@ -24,11 +24,27 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 
 
 CREATE OR REPLACE FUNCTION FD_NM_extendNegative(g geometry) RETURNS geometry AS $$
-	SELECT ST_ConvexHull(ST_Collect(ST_MakeLine(ST_MakePoint(FD_oldest(),0),ST_MakePoint(FD_oldest(),1)),$1));
+	SELECT ST_ConvexHull(
+		ST_Collect(
+			ST_MakeLine(
+				ST_MakePoint(FD_oldest(),0),
+				ST_MakePoint(FD_oldest(),ST_YMax($1))
+			),
+			$1
+		)
+	);
 $$ LANGUAGE sql IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION FD_NM_extendPositive(g geometry) RETURNS geometry AS $$
-	SELECT ST_ConvexHull(ST_Collect(ST_MakeLine(ST_MakePoint(FD_youngest(),0),ST_MakePoint(FD_youngest(),1)),$1));
+	SELECT ST_ConvexHull(
+		ST_Collect(
+			ST_MakeLine(
+				ST_MakePoint(FD_youngest(),0),
+				ST_MakePoint(FD_youngest(),ST_YMax($1))
+			)
+			,$1
+		)
+	);
 $$ LANGUAGE sql IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION FD_NM_complement(g geometry) RETURNS geometry AS $$

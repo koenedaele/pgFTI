@@ -24,33 +24,61 @@ BEGIN
 END
 $$ LANGUAGE plpgsql IMMUTABLE;
 
-CREATE OR REPLACE FUNCTION FD_makeFTI(sa date, ka date, kb date, sb date) RETURNS geometry AS $$
+CREATE OR REPLACE FUNCTION FD_makeFTI(sa date, ka date, kb date, sb date, l float) RETURNS geometry AS $$
 	SELECT ST_MakeLine(ARRAY[ST_MakePoint(FD_makeX($1),0),
-						ST_MakePoint(FD_makeX($2),1),
-						ST_MakePoint(FD_makeX($3),1),
+						ST_MakePoint(FD_makeX($2),$5),
+						ST_MakePoint(FD_makeX($3),$5),
 						ST_MakePoint(FD_makeX($4),0)]);
 $$ LANGUAGE sql IMMUTABLE;
 
+CREATE OR REPLACE FUNCTION FD_makeFTI(sa date, ka date, kb date, sb date) RETURNS geometry AS $$
+	SELECT FD_makeFTI($1,$2,$3,$4,1);
+$$ LANGUAGE sql IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION FD_makeFTI(ka date, kb date, l float) RETURNS geometry AS $$
+	SELECT FD_makeFTI($1,$1,$2,$2,$3);
+$$ LANGUAGE sql IMMUTABLE;
+
 CREATE OR REPLACE FUNCTION FD_makeFTI(ka date, kb date) RETURNS geometry AS $$
-	SELECT FD_maakVoorstelling($1,$1,$2,$2);
+	SELECT FD_makeFTI($1,$1,$2,$2,1);
+$$ LANGUAGE sql IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION FD_makeFTI(d date, l float) RETURNS geometry AS $$
+	SELECT FD_makeFTI($1,$1,$1,$1,$2);
 $$ LANGUAGE sql IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION FD_makeFTI(d date) RETURNS geometry AS $$
-	SELECT FD_maakVoorstelling($1,$1,$1,$1);
+	SELECT FD_makeFTI($1,$1,$1,$1,1);
+$$ LANGUAGE sql IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION FD_fuzzify(ka date, kb date, lv interval, rv interval, l float) RETURNS geometry AS $$
+	SELECT FD_makeFTI(($1 - $3)::date, $1, $2, ($2 + $4)::date,$5);
 $$ LANGUAGE sql IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION FD_fuzzify(ka date, kb date, lv interval, rv interval) RETURNS geometry AS $$
-	SELECT FD_maakVoorstelling(($1 - $3)::date, $1, $2, ($2 + $4)::date);
+	SELECT FD_fuzzify($1,$2,$3,$4,1);
+$$ LANGUAGE sql IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION FD_fuzzify(ka date, kb date, v interval, l float) RETURNS geometry AS $$
+	SELECT FD_fuzzify($1,$2,$3,$3,$4);
 $$ LANGUAGE sql IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION FD_fuzzify(ka date, kb date, v interval) RETURNS geometry AS $$
-	SELECT FD_fuzzify($1,$2,$3,$3);
+	SELECT FD_fuzzify($1,$2,$3,$3,1);
 $$ LANGUAGE sql IMMUTABLE;
 
-CREATE OR REPLACE FUNCTION FD_fuzzify(d date, v interval) RETURNS geometry AS $$
-	SELECT FD_fuzzify($1,$1,$2,$2);
+CREATE OR REPLACE FUNCTION FD_fuzzify(d date, lv interval, rv interval, l float) RETURNS geometry AS $$
+	SELECT FD_fuzzify($1,$1,$2,$3,$4);
 $$ LANGUAGE sql IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION FD_fuzzify(d date, lv interval, rv interval) RETURNS geometry AS $$
-	SELECT FD_fuzzify($1,$1,$2,$3);
+	SELECT FD_fuzzify($1,$1,$2,$3,1);
+$$ LANGUAGE sql IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION FD_fuzzify(d date, v interval, l float) RETURNS geometry AS $$
+	SELECT FD_fuzzify($1,$1,$2,$2,$3);
+$$ LANGUAGE sql IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION FD_fuzzify(d date, v interval) RETURNS geometry AS $$
+	SELECT FD_fuzzify($1,$1,$2,$2,1);
 $$ LANGUAGE sql IMMUTABLE;
