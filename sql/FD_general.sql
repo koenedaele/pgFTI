@@ -15,7 +15,7 @@ BEGIN
 	year := EXTRACT (year FROM $1);
 	IF year < 0 THEN
 		last_day_of_year = (lpad(abs(year)::text,4,'0') || '-12-31 BC')::date;
-		year := jaar + 1;
+		year := year + 1;
 	ELSE
 		last_day_of_year = (lpad(abs(year)::text,4,'0') || '-12-31 AD')::date;
 	END IF;
